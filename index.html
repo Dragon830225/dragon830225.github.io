@@ -1,11 +1,21 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Außer-Haus App</title>
+  <meta charset="UTF-8" />
+  <title>Außer-Haus Liefer-App</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 1rem; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 8px; border: 1px solid #ccc; margin-bottom: 5px; background: #f9f9f9; cursor: grab; }
+    li.dragging { opacity: 0.5; }
+    label { display: block; margin-top: 10px; }
+    input[type=text] { width: 100%; padding: 6px; box-sizing: border-box; }
+    button { margin-top: 10px; padding: 8px 12px; cursor: pointer; }
+    #admin { display: none; margin-top: 20px; padding-top: 10px; border-top: 2px solid #333; }
+  </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, onValue, set, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, onValue, set, push, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAJcjqAjlyrbiojweyXFOLMrelTsHSFog0",
@@ -21,74 +31,162 @@
     const db = getDatabase(app);
 
     let isAdmin = false;
+    let kundenData = {};
+    let kundenOrder = [];
 
-    function loadCustomers() {
+    // Wochentage deutsch, klein, für Menü-Keys
+    const wochenTage = ["montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag", "sonntag"];
+
+    // Kunden anzeigen mit Drag & Drop für Admin
+    function renderKunden() {
       const list = document.getElementById("customers");
       list.innerHTML = "";
-      onValue(ref(db, "kunden"), (snapshot) => {
-        list.innerHTML = "";
-        snapshot.forEach((child) => {
-          const data = child.val();
-          const li = document.createElement("li");
-          li.textContent = `${data.name}, ${data.strasse}, ${data.ort}`;
-          list.appendChild(li);
-        });
+
+      // Sortiere nach kundenOrder, falls vorhanden
+      const sortierteKeys = kundenOrder.length ? kundenOrder : Object.keys(kundenData);
+
+      sortierteKeys.forEach(key => {
+        const data = kundenData[key];
+        if (!data) return;
+        const li = document.createElement("li");
+        li.setAttribute("draggable", isAdmin);
+        li.dataset.key = key;
+        li.textContent = `${data.name}, ${data.strasse}, ${data.ort}`;
+        if (isAdmin) {
+          li.style.cursor = "grab";
+          li.addEventListener("dragstart", dragStart);
+          li.addEventListener("dragend", dragEnd);
+        }
+        list.appendChild(li);
       });
+      if (isAdmin) {
+        // Drag & Drop Events für Liste
+        list.addEventListener("dragover", dragOver);
+        list.addEventListener("drop", drop);
+      }
     }
 
-    function loadMenu() {
-      const menuList = document.getElementById("menu");
-      const today = new Date().toLocaleDateString("de-DE", { weekday: "long" }).toLowerCase();
-      onValue(ref(db, "menue"), (snapshot) => {
-        menuList.innerHTML = "";
-        const data = snapshot.val();
-        if (!data) return;
-        if (isAdmin) {
-          for (const tag in data) {
-            const li = document.createElement("li");
-            li.textContent = `${tag}: ${data[tag]}`;
-            menuList.appendChild(li);
-          }
+    // Drag & Drop Handlers
+    let dragged;
+
+    function dragStart(e) {
+      dragged = e.target;
+      e.target.classList.add("dragging");
+    }
+    function dragEnd(e) {
+      e.target.classList.remove("dragging");
+      dragged = null;
+    }
+    function dragOver(e) {
+      e.preventDefault();
+      const list = e.currentTarget;
+      const afterElement = getDragAfterElement(list, e.clientY);
+      if (afterElement == null) {
+        list.appendChild(dragged);
+      } else {
+        list.insertBefore(dragged, afterElement);
+      }
+    }
+    function drop(e) {
+      e.preventDefault();
+      // Aktualisiere kundenOrder nach neuer Reihenfolge
+      const list = document.getElementById("customers");
+      kundenOrder = Array.from(list.children).map(li => li.dataset.key);
+      // Speichere neue Reihenfolge in Firebase
+      set(ref(db, "kundenOrder"), kundenOrder);
+    }
+
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll("li:not(.dragging)")];
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
         } else {
-          const li = document.createElement("li");
-          li.textContent = `${today}: ${data[today] || "Kein Eintrag"}`;
-          menuList.appendChild(li);
+          return closest;
         }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // Menü rendern (für Admin ganze Woche, für Fahrer nur heutiges Gericht)
+    function renderMenue(menuData) {
+      const menuList = document.getElementById("menu");
+      menuList.innerHTML = "";
+
+      if (isAdmin) {
+        // Formular mit allen Tagen
+        const form = document.createElement("form");
+        form.id = "menuForm";
+
+        wochenTage.forEach(tag => {
+          const label = document.createElement("label");
+          label.textContent = tag.charAt(0).toUpperCase() + tag.slice(1);
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.name = tag;
+          input.value = menuData && menuData[tag] ? menuData[tag] : "";
+          input.placeholder = "Gericht eingeben";
+
+          label.appendChild(input);
+          form.appendChild(label);
+        });
+
+        const submitBtn = document.createElement("button");
+        submitBtn.type = "submit";
+        submitBtn.textContent = "Menü speichern";
+        form.appendChild(submitBtn);
+
+        form.onsubmit = e => {
+          e.preventDefault();
+          const updates = {};
+          wochenTage.forEach(tag => {
+            updates[tag] = form.elements[tag].value;
+          });
+          set(ref(db, "menue"), updates);
+          alert("Menü wurde gespeichert!");
+        };
+
+        menuList.appendChild(form);
+
+      } else {
+        // Fahrer sehen nur heutigen Tag
+        const today = new Date().toLocaleDateString("de-DE", { weekday: "long" }).toLowerCase();
+        const li = document.createElement("li");
+        li.textContent = `${today.charAt(0).toUpperCase() + today.slice(1)}: ${menuData && menuData[today] ? menuData[today] : "Kein Eintrag"}`;
+        menuList.appendChild(li);
+      }
+    }
+
+    // Daten laden & anzeigen
+    function loadData() {
+      onValue(ref(db, "kunden"), (snapshot) => {
+        kundenData = snapshot.val() || {};
+        renderKunden();
+      });
+      onValue(ref(db, "kundenOrder"), (snapshot) => {
+        kundenOrder = snapshot.val() || [];
+        renderKunden();
+      });
+      onValue(ref(db, "menue"), (snapshot) => {
+        renderMenue(snapshot.val());
       });
     }
 
     window.login = () => {
-      const pw = prompt("Passwort:");
+      const pw = prompt("Passwort eingeben:");
       if (pw === "1234") {
         isAdmin = true;
         document.getElementById("admin").style.display = "block";
-        loadCustomers();
-        loadMenu();
+        loadData();
       } else {
         alert("Falsches Passwort!");
       }
     };
 
-    window.addCustomer = () => {
-      const name = prompt("Name?");
-      const strasse = prompt("Straße?");
-      const ort = prompt("Ort?");
-      if (name && strasse && ort) {
-        push(ref(db, "kunden"), { name, strasse, ort });
-      }
-    };
-
-    window.setMenu = () => {
-      const tag = prompt("Wochentag (z. B. montag)?").toLowerCase();
-      const essen = prompt("Gericht für " + tag + "?");
-      if (tag && essen) {
-        set(ref(db, "menue/" + tag), essen);
-      }
-    };
-
     window.onload = () => {
-      loadCustomers();
-      loadMenu();
+      loadData();
     };
   </script>
 </head>
@@ -104,9 +202,7 @@
   <ul id="menu">Wird geladen...</ul>
 
   <div id="admin" style="display:none;">
-    <hr>
-    <button onclick="addCustomer()">➕ Kunden hinzufügen</button>
-    <button onclick="setMenu()">📝 Menü ändern</button>
+    <p>Als Admin kannst du die Kunden per Drag & Drop verschieben und das Menü für die ganze Woche eingeben.</p>
   </div>
 </body>
 </html>
