@@ -1,11 +1,124 @@
 <!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Webseite erfolgreich</title>
-  </head>
-  <body>
-    <h1>Hallo von deiner GitHub-Webseite 👋</h1>
-    <p>Diese Seite funktioniert jetzt!</p>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ausser Haus Kundenübersicht</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 1em;
+      background: #f9f9f9;
+    }
+    h1, h2 {
+      color: #004080;
+    }
+    .tour {
+      background: white;
+      padding: 1em;
+      border-radius: 10px;
+      margin-bottom: 1.5em;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      margin-bottom: 0.5em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    button {
+      margin-left: 1em;
+      background: #cc0000;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 0.2em 0.6em;
+    }
+    input, select {
+      padding: 0.4em;
+      margin: 0.5em 0;
+      width: 100%;
+      max-width: 400px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📋 Kundenübersicht – Ausser Haus</h1>
+
+  <form id="addForm">
+    <label>
+      Kunde (Name, Adresse):<br>
+      <input type="text" id="kundeInput" required placeholder="z. B. Frau Müller, Lindenstraße 4" />
+    </label><br>
+    <label>
+      Tour auswählen:<br>
+      <select id="tourSelect">
+        <option value="tour1">Tour 1</option>
+        <option value="tour2">Tour 2</option>
+      </select>
+    </label><br>
+    <button type="submit">➕ Kunde hinzufügen</button>
+  </form>
+
+  <div class="tour">
+    <h2>🚗 Tour 1</h2>
+    <ul id="tour1List"></ul>
+  </div>
+
+  <div class="tour">
+    <h2>🚐 Tour 2</h2>
+    <ul id="tour2List"></ul>
+  </div>
+
+  <script>
+    const tour1List = document.getElementById("tour1List");
+    const tour2List = document.getElementById("tour2List");
+
+    function saveData() {
+      const data = {
+        tour1: [...tour1List.children].map(li => li.textContent.replace("❌", "").trim()),
+        tour2: [...tour2List.children].map(li => li.textContent.replace("❌", "").trim())
+      };
+      localStorage.setItem("kundenDaten", JSON.stringify(data));
+    }
+
+    function loadData() {
+      const data = JSON.parse(localStorage.getItem("kundenDaten"));
+      if (data) {
+        data.tour1.forEach(k => addKunde(k, "tour1"));
+        data.tour2.forEach(k => addKunde(k, "tour2"));
+      }
+    }
+
+    function addKunde(kunde, tour) {
+      const li = document.createElement("li");
+      li.textContent = kunde;
+      const btn = document.createElement("button");
+      btn.textContent = "❌";
+      btn.onclick = () => {
+        li.remove();
+        saveData();
+      };
+      li.appendChild(btn);
+      (tour === "tour1" ? tour1List : tour2List).appendChild(li);
+    }
+
+    document.getElementById("addForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const kunde = document.getElementById("kundeInput").value.trim();
+      const tour = document.getElementById("tourSelect").value;
+      if (kunde) {
+        addKunde(kunde, tour);
+        saveData();
+        document.getElementById("addForm").reset();
+      }
+    });
+
+    loadData();
+  </script>
+</body>
 </html>
