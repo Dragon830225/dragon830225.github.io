@@ -3,35 +3,36 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Außer Haus Lieferung mit Firebase</title>
+<title>Außer Haus Lieferung (Firebase)</title>
 <style>
-  /* Dein CSS hier (kannst du vom vorherigen Beispiel übernehmen) */
   body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
   h1 { text-align: center; }
-  #loginDiv, #adminDiv, #fahrerDiv { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
-  label, input, button { font-size: 1.1em; margin: 5px 0; }
-  input[type="text"] { width: 100%; padding: 6px; }
+  #loginDiv, #adminDiv, #fahrerDiv { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+  label, input, button, textarea { font-size: 1.1em; margin: 5px 0; }
+  input[type="text"], input[type="password"], textarea { width: 100%; padding: 6px; }
   button { padding: 10px 15px; cursor: pointer; }
   .hidden { display: none; }
-  #kundenListe { margin-top: 10px; border: 1px solid #ccc; padding: 10px; min-height: 150px; background: #fafafa; }
-  .kunde { padding: 8px; border: 1px solid #ddd; margin-bottom: 5px; background: #fff; cursor: grab; }
+  #kundenListe, #kundenFahrerListe { margin-top: 10px; border: 1px solid #ccc; padding: 10px; min-height: 150px; background: #fafafa; }
+  .kunde { padding: 8px; border: 1px solid #ddd; margin-bottom: 5px; background: #fff; cursor: grab; display: flex; justify-content: space-between; align-items: center; }
   .kunde.dragging { opacity: 0.5; }
-  #menuForm textarea { width: 100%; height: 100px; font-size: 1em; }
+  #menuForm textarea { height: 140px; font-family: monospace; }
   #menuFahrer { white-space: pre-line; background: #e8e8e8; padding: 10px; margin-top: 10px; }
   #map { height: 300px; margin-top: 15px; border: 1px solid #ccc; }
-  .kundenfelder { display: flex; gap: 10px; }
-  .kundenfelder input { flex: 1; }
+  .kundenfelder { display: flex; gap: 10px; flex: 1; }
+  .kundenfelder input { flex: 1; margin-right: 10px; }
 </style>
 </head>
 <body>
 
-<h1>Außer Haus Lieferung (Firebase)</h1>
+<h1>Außer Haus Lieferung</h1>
 
 <div id="loginDiv">
   <label for="passwort">Admin Passwort eingeben:</label>
-  <input type="password" id="passwort" />
+  <input type="password" id="passwort" autocomplete="off" />
   <button id="loginBtn">Login</button>
   <p id="loginFehler" style="color:red;"></p>
+  <hr>
+  <button id="showFahrerBtn">Als Fahrer ansehen</button>
 </div>
 
 <div id="adminDiv" class="hidden">
@@ -44,31 +45,32 @@
 
   <h3>Menü für die Woche eingeben</h3>
   <form id="menuForm">
-    <textarea id="menuText" placeholder="Menü für die Woche hier eingeben, z.B.:\nMontag: ...\nDienstag: ..."></textarea><br />
+    <textarea id="menuText" placeholder="Menü für die Woche hier eingeben, z.B.:\nMontag: Gericht 1\nDienstag: Gericht 2\n..."></textarea><br />
     <button type="submit">Menü speichern</button>
   </form>
 
   <h3>Kunden auf Karte</h3>
-  <div id="map"></div>
+  <div id="mapAdmin"></div>
 </div>
 
 <div id="fahrerDiv" class="hidden">
   <h2>Fahrer Ansicht</h2>
-  <p>Menü für heute:</p>
+  <button id="fahrerLogoutBtn">Zur Login-Seite</button>
+  <p><strong>Menü für heute:</strong></p>
   <div id="menuFahrer"></div>
   <h3>Kundenliste</h3>
   <div id="kundenFahrerListe"></div>
-  <div id="map"></div>
+  <div id="mapFahrer"></div>
 </div>
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
+<!-- Google Maps API, DEIN_GOOGLE_MAPS_API_KEY ersetzen! -->
 <script src="https://maps.googleapis.com/maps/api/js?key=DEIN_GOOGLE_MAPS_API_KEY"></script>
 
 <script>
-// --- Firebase konfigurieren ---
 const firebaseConfig = {
   apiKey: "AIzaSyAJcjqAjlyrbiojweyXFOLMrelTsHSFog0",
   authDomain: "ausser-haus.firebaseapp.com",
@@ -78,7 +80,6 @@ const firebaseConfig = {
   messagingSenderId: "919348966579",
   appId: "1:919348966579:web:8cdbe342868eb6013eecc6"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
@@ -93,12 +94,13 @@ const loginBtn = document.getElementById("loginBtn");
 const loginFehler = document.getElementById("loginFehler");
 
 const logoutBtn = document.getElementById("logoutBtn");
-
-const kundenListe = document.getElementById("kundenListe");
 const kundeNeuBtn = document.getElementById("kundeNeuBtn");
-
+const kundenListe = document.getElementById("kundenListe");
 const menuForm = document.getElementById("menuForm");
 const menuTextArea = document.getElementById("menuText");
+
+const showFahrerBtn = document.getElementById("showFahrerBtn");
+const fahrerDivBtnLogout = document.getElementById("fahrerLogoutBtn");
 
 const menuFahrer = document.getElementById("menuFahrer");
 const kundenFahrerListe = document.getElementById("kundenFahrerListe");
@@ -106,14 +108,70 @@ const kundenFahrerListe = document.getElementById("kundenFahrerListe");
 let kunden = [];
 let menuText = "";
 
-// Kunden rendern (Admin)
-function renderKunden() {
+// Login Funktion
+loginBtn.addEventListener("click", () => {
+  if (passwortInput.value === adminPasswort) {
+    loginDiv.classList.add("hidden");
+    adminDiv.classList.remove("hidden");
+    loginFehler.textContent = "";
+    ladeDaten();
+  } else {
+    loginFehler.textContent = "Falsches Passwort!";
+  }
+});
+
+// Logout Admin
+logoutBtn.addEventListener("click", () => {
+  adminDiv.classList.add("hidden");
+  loginDiv.classList.remove("hidden");
+  passwortInput.value = "";
+});
+
+// Fahrer Ansicht anzeigen (ohne Login)
+showFahrerBtn.addEventListener("click", () => {
+  loginDiv.classList.add("hidden");
+  fahrerDiv.classList.remove("hidden");
+  ladeDaten();
+});
+
+// Fahrer Logout zurück zum Login
+fahrerDivBtnLogout.addEventListener("click", () => {
+  fahrerDiv.classList.add("hidden");
+  loginDiv.classList.remove("hidden");
+});
+
+// Daten laden
+function ladeDaten() {
+  // Kunden laden
+  db.ref("kunden").once("value").then(snapshot => {
+    kunden = snapshot.val() || [];
+    if (adminDiv.classList.contains("hidden")) {
+      renderFahrer();
+      zeigeMenuFahrer();
+      initMap("fahrer");
+    } else {
+      renderAdmin();
+      initMap("admin");
+    }
+  });
+
+  // Menü laden
+  db.ref("menuText").once("value").then(snapshot => {
+    menuText = snapshot.val() || "";
+    menuTextArea.value = menuText;
+    if (fahrerDiv.classList.contains("hidden")) return;
+    zeigeMenuFahrer();
+  });
+}
+
+// Kunden im Adminbereich anzeigen
+function renderAdmin() {
   kundenListe.innerHTML = "";
-  kunden.forEach((kunde, index) => {
+  kunden.forEach((kunde, i) => {
     const div = document.createElement("div");
     div.className = "kunde";
     div.draggable = true;
-    div.dataset.index = index;
+    div.dataset.index = i;
     div.innerHTML = `
       <div class="kundenfelder">
         <input type="text" class="name" placeholder="Name" value="${kunde.name}" />
@@ -124,74 +182,7 @@ function renderKunden() {
     `;
     kundenListe.appendChild(div);
 
+    // Löschen Button
     div.querySelector(".kundeLoeschen").addEventListener("click", () => {
-      kunden.splice(index, 1);
-      saveKunden();
-    });
-
-    ["name", "strasse", "ort"].forEach(field => {
-      div.querySelector(`.${field}`).addEventListener("input", e => {
-        kunden[index][field] = e.target.value;
-        saveKunden();
-      });
-    });
-
-    // Drag & Drop Events
-    div.addEventListener("dragstart", e => {
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", index);
-      div.classList.add("dragging");
-    });
-    div.addEventListener("dragend", () => {
-      div.classList.remove("dragging");
-    });
-    div.addEventListener("dragover", e => {
-      e.preventDefault();
-    });
-    div.addEventListener("drop", e => {
-      e.preventDefault();
-      const srcIndex = e.dataTransfer.getData("text/plain");
-      const tgtIndex = index;
-      if (srcIndex !== tgtIndex) {
-        const moved = kunden.splice(srcIndex, 1)[0];
-        kunden.splice(tgtIndex, 0, moved);
-        saveKunden();
-      }
-    });
-  });
-}
-
-// Kundenliste für Fahrer rendern (nur lesen)
-function renderFahrer() {
-  kundenFahrerListe.innerHTML = "";
-  kunden.forEach(kunde => {
-    const div = document.createElement("div");
-    div.className = "kunde";
-    div.textContent = `${kunde.name} — ${kunde.strasse}, ${kunde.ort}`;
-    kundenFahrerListe.appendChild(div);
-  });
-}
-
-// Menü für Fahrer anzeigen (aktueller Wochentag)
-function zeigeMenuFahrer() {
-  const heute = new Date();
-  const options = { weekday: "long" };
-  const tagName = heute.toLocaleDateString("de-DE", options);
-  const lines = menuText.split("\n");
-  let heuteMenu = "";
-  for (let line of lines) {
-    if (line.toLowerCase().startsWith(tagName.toLowerCase())) {
-      heuteMenu = line.split(":")[1]?.trim() || "";
-      break;
-    }
-  }
-  menuFahrer.textContent = heuteMenu || "Für heute ist kein Menü eingetragen.";
-}
-
-// Karte initialisieren
-function initMap() {
-  const map = new google.maps.Map(document.getElementById("map"), {
-    zoom: 10,
-    center: { lat: 53.5511, lng: 9.9937 }, // Hamburg als Standard
-  });
-  kunden.for
+      kunden.splice(i, 1);
+      speichernK
