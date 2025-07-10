@@ -2,123 +2,86 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ausser Haus Kundenübersicht</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Außer-Haus App</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 1em;
-      background: #f9f9f9;
-    }
-    h1, h2 {
-      color: #004080;
-    }
-    .tour {
-      background: white;
-      padding: 1em;
-      border-radius: 10px;
-      margin-bottom: 1.5em;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-    }
-    li {
-      margin-bottom: 0.5em;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    button {
-      margin-left: 1em;
-      background: #cc0000;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      padding: 0.2em 0.6em;
-    }
-    input, select {
-      padding: 0.4em;
-      margin: 0.5em 0;
-      width: 100%;
-      max-width: 400px;
-    }
+    body { font-family: sans-serif; padding: 1em; max-width: 600px; margin: auto; }
+    input, button, select { margin: 5px 0; padding: 0.5em; width: 100%; }
+    .admin { background: #f3f3f3; padding: 1em; margin-top: 1em; border-radius: 8px; }
+    .kunde { border-bottom: 1px solid #ccc; padding: 0.5em 0; }
   </style>
 </head>
 <body>
-  <h1>📋 Kundenübersicht – Ausser Haus</h1>
+  <h2>Außer-Haus Kundenübersicht</h2>
+  <div id="kundenListe"></div>
 
-  <form id="addForm">
-    <label>
-      Kunde (Name, Adresse):<br>
-      <input type="text" id="kundeInput" required placeholder="z. B. Frau Müller, Lindenstraße 4" />
-    </label><br>
-    <label>
-      Tour auswählen:<br>
-      <select id="tourSelect">
-        <option value="tour1">Tour 1</option>
-        <option value="tour2">Tour 2</option>
-      </select>
-    </label><br>
-    <button type="submit">➕ Kunde hinzufügen</button>
-  </form>
-
-  <div class="tour">
-    <h2>🚗 Tour 1</h2>
-    <ul id="tour1List"></ul>
-  </div>
-
-  <div class="tour">
-    <h2>🚐 Tour 2</h2>
-    <ul id="tour2List"></ul>
+  <div class="admin">
+    <h3>Admin Login</h3>
+    <input type="password" id="adminPasswort" placeholder="Passwort eingeben">
+    <button onclick="login()">Login</button>
+    
+    <div id="adminFormular" style="display:none">
+      <h4>Neuen Kunden hinzufügen</h4>
+      <input type="text" id="name" placeholder="Name">
+      <input type="text" id="strasse" placeholder="Straße">
+      <input type="text" id="ort" placeholder="Ort">
+      <button onclick="hinzufuegen()">Speichern</button>
+    </div>
   </div>
 
   <script>
-    const tour1List = document.getElementById("tour1List");
-    const tour2List = document.getElementById("tour2List");
+    const firebaseConfig = {
+      apiKey: "AIzaSyAJcjqAjlyrbiojweyXFOLMrelTsHSFog0",
+      authDomain: "ausser-haus.firebaseapp.com",
+      databaseURL: "https://ausser-haus-default-rtdb.firebaseio.com",
+      projectId: "ausser-haus",
+      storageBucket: "ausser-haus.firebasestorage.app",
+      messagingSenderId: "919348966579",
+      appId: "1:919348966579:web:8cdbe342868eb6013eecc6"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    function saveData() {
-      const data = {
-        tour1: [...tour1List.children].map(li => li.textContent.replace("❌", "").trim()),
-        tour2: [...tour2List.children].map(li => li.textContent.replace("❌", "").trim())
-      };
-      localStorage.setItem("kundenDaten", JSON.stringify(data));
+    const kundenListe = document.getElementById("kundenListe");
+
+    function ladeKunden() {
+      db.ref("kunden").on("value", (snapshot) => {
+        kundenListe.innerHTML = "";
+        snapshot.forEach((kind) => {
+          const k = kind.val();
+          const div = document.createElement("div");
+          div.className = "kunde";
+          div.innerText = `${k.name}, ${k.strasse}, ${k.ort}`;
+          kundenListe.appendChild(div);
+        });
+      });
     }
 
-    function loadData() {
-      const data = JSON.parse(localStorage.getItem("kundenDaten"));
-      if (data) {
-        data.tour1.forEach(k => addKunde(k, "tour1"));
-        data.tour2.forEach(k => addKunde(k, "tour2"));
+    ladeKunden();
+
+    function login() {
+      const pw = document.getElementById("adminPasswort").value;
+      if (pw === "1234") {
+        document.getElementById("adminFormular").style.display = "block";
+      } else {
+        alert("Falsches Passwort");
       }
     }
 
-    function addKunde(kunde, tour) {
-      const li = document.createElement("li");
-      li.textContent = kunde;
-      const btn = document.createElement("button");
-      btn.textContent = "❌";
-      btn.onclick = () => {
-        li.remove();
-        saveData();
-      };
-      li.appendChild(btn);
-      (tour === "tour1" ? tour1List : tour2List).appendChild(li);
+    function hinzufuegen() {
+      const name = document.getElementById("name").value;
+      const strasse = document.getElementById("strasse").value;
+      const ort = document.getElementById("ort").value;
+      if (!name || !strasse || !ort) return alert("Bitte alle Felder ausfüllen");
+      const neuerKunde = { name, strasse, ort };
+      const neuerKey = db.ref("kunden").push().key;
+      db.ref("kunden/" + neuerKey).set(neuerKunde);
+      document.getElementById("name").value = "";
+      document.getElementById("strasse").value = "";
+      document.getElementById("ort").value = "";
     }
-
-    document.getElementById("addForm").addEventListener("submit", e => {
-      e.preventDefault();
-      const kunde = document.getElementById("kundeInput").value.trim();
-      const tour = document.getElementById("tourSelect").value;
-      if (kunde) {
-        addKunde(kunde, tour);
-        saveData();
-        document.getElementById("addForm").reset();
-      }
-    });
-
-    loadData();
   </script>
 </body>
 </html>
