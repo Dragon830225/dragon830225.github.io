@@ -1,87 +1,112 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Außer-Haus App</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 1em; max-width: 600px; margin: auto; }
-    input, button, select { margin: 5px 0; padding: 0.5em; width: 100%; }
-    .admin { background: #f3f3f3; padding: 1em; margin-top: 1em; border-radius: 8px; }
-    .kunde { border-bottom: 1px solid #ccc; padding: 0.5em 0; }
-  </style>
-</head>
-<body>
-  <h2>Außer-Haus Kundenübersicht</h2>
-  <div id="kundenListe"></div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-  <div class="admin">
-    <h3>Admin Login</h3>
-    <input type="password" id="adminPasswort" placeholder="Passwort eingeben">
-    <button onclick="login()">Login</button>
-    
-    <div id="adminFormular" style="display:none">
-      <h4>Neuen Kunden hinzufügen</h4>
-      <input type="text" id="name" placeholder="Name">
-      <input type="text" id="strasse" placeholder="Straße">
-      <input type="text" id="ort" placeholder="Ort">
-      <button onclick="hinzufuegen()">Speichern</button>
-    </div>
-  </div>
-
-  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyAJcjqAjlyrbiojweyXFOLMrelTsHSFog0",
       authDomain: "ausser-haus.firebaseapp.com",
       databaseURL: "https://ausser-haus-default-rtdb.firebaseio.com",
       projectId: "ausser-haus",
-      storageBucket: "ausser-haus.firebasestorage.app",
+      storageBucket: "ausser-haus.appspot.com",
       messagingSenderId: "919348966579",
       appId: "1:919348966579:web:8cdbe342868eb6013eecc6"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
 
-    const kundenListe = document.getElementById("kundenListe");
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-    function ladeKunden() {
-      db.ref("kunden").on("value", (snapshot) => {
-        kundenListe.innerHTML = "";
-        snapshot.forEach((kind) => {
-          const k = kind.val();
-          const div = document.createElement("div");
-          div.className = "kunde";
-          div.innerText = `${k.name}, ${k.strasse}, ${k.ort}`;
-          kundenListe.appendChild(div);
+    let isAdmin = false;
+
+    function loadCustomers() {
+      const list = document.getElementById("customers");
+      list.innerHTML = "";
+      onValue(ref(db, "kunden"), (snapshot) => {
+        list.innerHTML = "";
+        snapshot.forEach((child) => {
+          const data = child.val();
+          const li = document.createElement("li");
+          li.textContent = `${data.name}, ${data.strasse}, ${data.ort}`;
+          list.appendChild(li);
         });
       });
     }
 
-    ladeKunden();
+    function loadMenu() {
+      const menuList = document.getElementById("menu");
+      const today = new Date().toLocaleDateString("de-DE", { weekday: "long" }).toLowerCase();
+      onValue(ref(db, "menue"), (snapshot) => {
+        menuList.innerHTML = "";
+        const data = snapshot.val();
+        if (!data) return;
+        if (isAdmin) {
+          for (const tag in data) {
+            const li = document.createElement("li");
+            li.textContent = `${tag}: ${data[tag]}`;
+            menuList.appendChild(li);
+          }
+        } else {
+          const li = document.createElement("li");
+          li.textContent = `${today}: ${data[today] || "Kein Eintrag"}`;
+          menuList.appendChild(li);
+        }
+      });
+    }
 
-    function login() {
-      const pw = document.getElementById("adminPasswort").value;
+    window.login = () => {
+      const pw = prompt("Passwort:");
       if (pw === "1234") {
-        document.getElementById("adminFormular").style.display = "block";
+        isAdmin = true;
+        document.getElementById("admin").style.display = "block";
+        loadCustomers();
+        loadMenu();
       } else {
-        alert("Falsches Passwort");
+        alert("Falsches Passwort!");
       }
-    }
+    };
 
-    function hinzufuegen() {
-      const name = document.getElementById("name").value;
-      const strasse = document.getElementById("strasse").value;
-      const ort = document.getElementById("ort").value;
-      if (!name || !strasse || !ort) return alert("Bitte alle Felder ausfüllen");
-      const neuerKunde = { name, strasse, ort };
-      const neuerKey = db.ref("kunden").push().key;
-      db.ref("kunden/" + neuerKey).set(neuerKunde);
-      document.getElementById("name").value = "";
-      document.getElementById("strasse").value = "";
-      document.getElementById("ort").value = "";
-    }
+    window.addCustomer = () => {
+      const name = prompt("Name?");
+      const strasse = prompt("Straße?");
+      const ort = prompt("Ort?");
+      if (name && strasse && ort) {
+        push(ref(db, "kunden"), { name, strasse, ort });
+      }
+    };
+
+    window.setMenu = () => {
+      const tag = prompt("Wochentag (z. B. montag)?").toLowerCase();
+      const essen = prompt("Gericht für " + tag + "?");
+      if (tag && essen) {
+        set(ref(db, "menue/" + tag), essen);
+      }
+    };
+
+    window.onload = () => {
+      loadCustomers();
+      loadMenu();
+    };
   </script>
+</head>
+<body>
+  <h1>🍽️ Außer-Haus Liefer-App</h1>
+  <button onclick="login()">🔐 Admin-Login</button>
+  <hr>
+
+  <h2>Kundendaten</h2>
+  <ul id="customers">Wird geladen...</ul>
+
+  <h2>Menü</h2>
+  <ul id="menu">Wird geladen...</ul>
+
+  <div id="admin" style="display:none;">
+    <hr>
+    <button onclick="addCustomer()">➕ Kunden hinzufügen</button>
+    <button onclick="setMenu()">📝 Menü ändern</button>
+  </div>
 </body>
 </html>
