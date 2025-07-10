@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin-Bereich</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    input, select, button, textarea {
+      display: block;
+      margin: 0.5em 0;
+      padding: 0.5em;
+      width: 100%;
+      max-width: 500px;
+    }
+    .tour-block {
+      border: 1px solid #ccc;
+      padding: 1em;
+      margin-top: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>👨‍💼 Admin-Bereich: Kunden & Menü</h1>
+
+  <h2>📋 Kunde hinzufügen</h2>
+  <input id="name" placeholder="Name">
+  <input id="strasse" placeholder="Straße">
+  <input id="ort" placeholder="Ort">
+  <select id="tour">
+    <option value="tour1">Tour 1</option>
+    <option value="tour2">Tour 2</option>
+  </select>
+  <button onclick="kundeHinzufuegen()">➕ Hinzufügen</button>
+
+  <h2>🍽 Speiseplan bearbeiten</h2>
+  <div id="menuEditor"></div>
+  <button onclick="speiseplanSpeichern()">💾 Speiseplan speichern</button>
+
+  <h2>📍 Kartenansicht (Google Maps Links)</h2>
+  <div id="kartenLinks"></div>
+
+  <script>
+    const kundenUrl = "https://dragon830225.github.io/kunden.json";
+    const menueUrl = "https://dragon830225.github.io/menue.json";
+
+    let kunden = [];
+    let speiseplan = {};
+
+    async function ladeDaten() {
+      kunden = await fetch(kundenUrl).then(r => r.json());
+      speiseplan = await fetch(menueUrl).then(r => r.json());
+      zeigeSpeiseplan();
+      zeigeKarten();
+    }
+
+    function kundeHinzufuegen() {
+      const name = document.getElementById("name").value;
+      const strasse = document.getElementById("strasse").value;
+      const ort = document.getElementById("ort").value;
+      const tour = document.getElementById("tour").value;
+
+      if (!name || !strasse || !ort) return alert("Alle Felder ausfüllen!");
+
+      kunden.push({ name, strasse, ort, tour });
+      speichernJSON("kunden.json", kunden);
+      zeigeKarten();
+    }
+
+    function zeigeSpeiseplan() {
+      const feld = document.getElementById("menuEditor");
+      feld.innerHTML = "";
+      for (let tag of ["montag","dienstag","mittwoch","donnerstag","freitag","samstag","sonntag"]) {
+        feld.innerHTML += `
+          <label>${tag.charAt(0).toUpperCase() + tag.slice(1)}:
+            <input value="${speiseplan[tag] || ''}" id="menu_${tag}">
+          </label>`;
+      }
+    }
+
+    function speiseplanSpeichern() {
+      for (let tag of ["montag","dienstag","mittwoch","donnerstag","freitag","samstag","sonntag"]) {
+        speiseplan[tag] = document.getElementById("menu_" + tag).value;
+      }
+      speichernJSON("menue.json", speiseplan);
+      alert("Menü gespeichert!");
+    }
+
+    function zeigeKarten() {
+      const div = document.getElementById("kartenLinks");
+      div.innerHTML = "";
+      kunden.forEach(k => {
+        const adresse = `${k.strasse}, ${k.ort}`;
+        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adresse)}`;
+        div.innerHTML += `<p>${k.name} (${k.tour}): <a href="${url}" target="_blank">📍 Karte</a></p>`;
+      });
+    }
+
+    function speichernJSON(dateiname, daten) {
+      const blob = new Blob([JSON.stringify(daten, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = dateiname;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    ladeDaten();
+  </script>
+</body>
+</html>
